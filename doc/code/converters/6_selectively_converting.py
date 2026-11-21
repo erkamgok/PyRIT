@@ -30,7 +30,9 @@ from io import StringIO
 
 from pyrit.converter import (
     Base64Converter,
+    ContentWordSelectionStrategy,
     IndexSelectionStrategy,
+    KeywordSelectionStrategy,
     ROT13Converter,
     SelectiveTextConverter,
     TokenSelectionStrategy,
@@ -185,11 +187,19 @@ for converter, expected in zip([Base64Converter(), ROT13Converter()], expected_s
 # | `WordRegexSelectionStrategy` | Words matching a regular expression. |
 # | `WordPositionSelectionStrategy` | A range of proportional word positions. |
 # | `WordProportionSelectionStrategy` | A random proportion of words; set a seed for repeatable selection. |
+# | `ContentWordSelectionStrategy` | Content words, left to right: skips the first `skip_first` (default 1), then selects up to `max_words` (default 2). Stopwords and words shorter than `min_word_length` (default 3) are never selected. |
+# | `AllWordsSelectionStrategy` | Every word. Word-level converters use it when no strategy is given. |
 # | `IndexSelectionStrategy` | A continuous character range; the end is exclusive. |
+# | `RegexSelectionStrategy` | The first match of a regular expression. |
+# | `KeywordSelectionStrategy` | The first occurrence of a keyword, extended by `context_before` and `context_after` characters. |
+# | `PositionSelectionStrategy` | A character range given as proportions of the text length, for example `0.25` to `0.75`. |
+# | `RangeSelectionStrategy` | The same range as `PositionSelectionStrategy`, but both proportions are optional and default to the whole text. |
+# | `ProportionSelectionStrategy` | A proportion of the characters anchored at the `start`, `end`, `middle`, or a `random` position; set a seed for repeatable selection. |
 # | `TokenSelectionStrategy` | Innermost regions marked by an earlier stage or by the input. |
 #
 # Word selection uses a space as its default separator. Set `word_separator` when your input uses another separator.
 # Character selection can operate on phrases or multiline text.
+# If a regex or keyword strategy finds no match, the text is returned unchanged.
 
 # %%
 numbers = SelectiveTextConverter(
@@ -205,6 +215,28 @@ characters = SelectiveTextConverter(
 character_result = await characters.convert_async(prompt="keep hello unchanged")  # type: ignore
 print(character_result.output_text)
 assert character_result.output_text == "keep uryyb unchanged"
+
+# %% [markdown]
+# `KeywordSelectionStrategy` finds the keyword and adds the requested number of characters around it.
+# `ContentWordSelectionStrategy` picks content words without a tagger or model; by default it leaves the first one
+# unchanged and selects the next two.
+
+# %%
+keyword = SelectiveTextConverter(
+    sub_converter=ROT13Converter(),
+    selection_strategy=KeywordSelectionStrategy(keyword="secret", context_after=5),
+)
+keyword_result = await keyword.convert_async(prompt="the secret code is 42")  # type: ignore
+print(keyword_result.output_text)
+assert keyword_result.output_text == "the frperg pbqr is 42"
+
+content_words = SelectiveTextConverter(
+    sub_converter=ROT13Converter(),
+    selection_strategy=ContentWordSelectionStrategy(),
+)
+content_result = await content_words.convert_async(prompt="tell me how to build a birdhouse")  # type: ignore
+print(content_result.output_text)
+assert content_result.output_text == "tell me how to ohvyq a ovequbhfr"
 
 # %% [markdown]
 # ## 5. Put the Chain in an Attack
